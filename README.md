@@ -2,7 +2,7 @@
 
 Real-time competitive chess with a wager-based ecosystem.
 
-> **Stack:** Next.js 14 · TypeScript · Socket.io · PostgreSQL · Drizzle ORM · Custom JWT Auth
+> **Stack:** Next.js 14 · TypeScript · Socket.io · PostgreSQL (or embedded PGlite) · Drizzle ORM · Custom JWT Auth
 
 ---
 
@@ -10,11 +10,9 @@ Real-time competitive chess with a wager-based ecosystem.
 
 ### Prerequisites
 
-Install these before starting:
-
 - [Node.js 20+](https://nodejs.org/)
-- [PostgreSQL 15+](https://www.postgresql.org/download/) running locally
-- Git
+- Git  
+- **Optional:** [Docker Desktop](https://docs.docker.com/desktop/) (for containerized Postgres), or local PostgreSQL 15+
 
 ---
 
@@ -31,81 +29,67 @@ cd chesspay
 npm install
 ```
 
-### 3. Create your local database
-
-Open psql or any Postgres client and run:
-
-```sql
-CREATE DATABASE checkmategg;
-```
-
-### 4. Configure environment variables
+### 3. Environment variables
 
 ```bash
 cp .env.example .env.local
 ```
 
-Open `.env.local` and fill in:
+Edit `.env.local`:
 
-```env
-DATABASE_URL="postgresql://postgres:yourpassword@localhost:5432/checkmategg"
+1. Set strong **JWT** secrets (min 32 characters each).
+2. Choose **one** database mode:
+   - **Easiest (no Docker):** leave **`USE_PGLITE="true"`** as in `.env.example`. Data defaults to your OS temp dir (`%TEMP%/chesspay-pglite-data` on Windows).
+   - **Docker Postgres:** set **`USE_PGLITE="false"`** and use **`DATABASE_URL`** pointing at `docker-compose.yml` (port **5433**), then run **`npm run launch`** (starts DB, migrates, seeds).
+   - **Native Postgres:** `USE_PGLITE="false"`, set **`DATABASE_URL`**, then **`npm run db:setup:native`** (creates DB if needed, migrate, seed).
 
-JWT_ACCESS_SECRET="generate-with-openssl-rand-base64-64"
-JWT_REFRESH_SECRET="generate-another-with-openssl-rand-base64-64"
-JWT_ACCESS_EXPIRES_IN="15m"
-JWT_REFRESH_EXPIRES_IN="7d"
+Keep **`PORT`**, **`NEXT_PUBLIC_APP_URL`**, and **`NEXT_PUBLIC_SOCKET_URL`** on the **same** host/port (default **3002** so 3000/3001 stay free).
 
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
-NEXT_PUBLIC_SOCKET_URL="http://localhost:3000"
-NODE_ENV="development"
-PORT="3000"
+Generate JWT secrets:
 
-PLATFORM_ACCOUNT_ID="00000000-0000-0000-0000-000000000001"
-RAKE_PERCENT="7.50"
-PAYOUT_HOLD_MINUTES="15"
-HIGH_STAKES_THRESHOLD_USD="25.00"
-RECONNECT_WINDOW_SECONDS="60"
-
-# Stripe — leave as-is for Phase 1 (not active yet)
-STRIPE_SECRET_KEY="sk_test_REPLACE_ME"
-STRIPE_WEBHOOK_SECRET="whsec_REPLACE_ME"
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_REPLACE_ME"
-```
-
-Generate secrets with:
 ```bash
 node -e "console.log(require('crypto').randomBytes(64).toString('base64'))"
 ```
-Run it twice — once for each JWT secret.
 
-### 5. Run database migrations
+Run twice — once per JWT secret.
+
+### 4. Database: migrate + seed
+
+If you use **PGlite** (`USE_PGLITE=true`):
 
 ```bash
-npm run db:generate
-npm run db:migrate
+npm run launch
 ```
 
-### 6. Seed test users
+(`launch` skips Docker when `USE_PGLITE` is set and runs migrate + seed only.)
+
+If you already have Postgres up and `USE_PGLITE=false`:
 
 ```bash
+npm run db:migrate
 npm run db:seed
 ```
 
-This creates:
+> **Note:** Migrations live in `db/migrations/`. You only need `npm run db:generate` when you change the Drizzle schema and need new SQL.
 
-| Email | Password | Notes |
-|---|---|---|
-| `alice@test.com` | `TestPass123!` | Primary test user |
-| `bob@test.com` | `TestPass123!` | Second player |
-| `admin@test.com` | `AdminPass123!` | Admin user |
-
-### 7. Start the app
+### 5. Start the app
 
 ```bash
 npm run dev
 ```
 
-Open **http://localhost:3000**
+The terminal prints **`Local app: http://localhost:3002`** (or whatever **`PORT`** you set).
+
+Open that URL in the browser.
+
+### 6. Production build / run
+
+```bash
+npm run build
+npm run start
+```
+
+`npm run start` uses **`cross-env`** so **`NODE_ENV=production`** works on Windows and Unix.
 
 ---
 
@@ -113,38 +97,42 @@ Open **http://localhost:3000**
 
 ### Full game flow (two browser tabs)
 
-1. Open **http://localhost:3000** in Tab 1 → log in as `alice@test.com`
-2. Open **http://localhost:3000** in Tab 2 (incognito) → log in as `bob@test.com`
-3. In Tab 1: go to **Play** → select time control → click **Find Match**
-   - This creates a game and navigates to the game room
-4. Copy the game URL from Tab 1
-5. Paste it into Tab 2 — both players connect, game starts automatically
-6. Play moves in both tabs — board syncs in real time via Socket.io
-7. Checkmate, resign, or let time run out → result screen appears
+1. Open the app URL (e.g. **http://localhost:3002**) in Tab 1 → log in as `alice@test.com`
+2. Same URL in Tab 2 (incognito) → log in as `bob@test.com`
+3. In Tab 1: **Play** → time control → **Find Match** (or share a game link as before)
+4. Both players in the game room → moves sync over Socket.io
+5. Checkmate, resign, or timeout → result screen
 
 ### Wallet testing
 
-1. Go to **Wallet** page
-2. Click **+ $100** (dev-only button) to add test funds
-3. Play a wager game — funds lock into escrow on game start
-4. After game completes — ledger updates, winner receives net pot
+1. **Wallet** → **+ $100** (dev-only) for test funds
+2. Wager games lock escrow; ledger updates after completion
 
 ### Verify ledger integrity
 
-Connect to Postgres and run:
+Connect to your DB (or use Drizzle Studio: `npm run db:studio`) and run:
+
 ```sql
--- All transactions for a user
 SELECT txn_type, amount, status, created_at
 FROM ledger_transactions
-WHERE user_id = '<paste user id here>'
+WHERE user_id = '<user id>'
 ORDER BY created_at;
 
--- Derived balance (this is what the API returns)
 SELECT COALESCE(SUM(amount), 0) AS available_balance
 FROM ledger_transactions
-WHERE user_id = '<paste user id here>'
+WHERE user_id = '<user id>'
 AND status = 'SETTLED';
 ```
+
+---
+
+## Test accounts (after `npm run db:seed`)
+
+| Email | Password | Notes |
+|---|---|---|
+| `alice@test.com` | `TestPass123!` | Primary test user |
+| `bob@test.com` | `TestPass123!` | Second player |
+| `admin@test.com` | `AdminPass123!` | Admin user |
 
 ---
 
@@ -152,54 +140,25 @@ AND status = 'SETTLED';
 
 ```
 chesspay/
-├── app/                        # Next.js App Router
-│   ├── (auth)/                 # Login, Register pages
-│   ├── (app)/                  # Authenticated pages
-│   │   ├── dashboard/
-│   │   ├── lobby/              # Matchmaking
-│   │   ├── game/[id]/          # Live game room ← core product
-│   │   ├── wallet/
-│   │   └── result/[id]/
-│   ├── api/                    # REST API routes
-│   │   ├── auth/               # login, register, refresh
-│   │   ├── games/              # game CRUD
-│   │   ├── wallet/             # balance + transactions
-│   │   └── health/             # Render health check
-│   ├── layout.tsx
-│   └── globals.css
+├── app/
+│   ├── (auth)/                 # Login, Register
+│   ├── (app)/                  # Dashboard, lobby, game, wallet, history, result
+│   └── api/                    # auth, games, wallet, health, matchmaking, platform/activity
 ├── components/
-│   ├── ui/                     # Button, Input, Card, Badge, Spinner, Toaster
-│   ├── chess/                  # Chess-specific components
-│   └── layout/                 # AppShell, Sidebar
-├── context/
-│   ├── auth.context.tsx         # Global auth state + token management
-│   └── matchmaking.context.tsx  # Queue state
-├── db/
-│   ├── schema/                 # Drizzle schema (enums, users, games, ledger, anticheat)
-│   ├── migrations/             # Generated SQL migrations
-│   └── client.ts               # DB connection
-├── hooks/
-│   └── useGameSocket.ts        # Socket.io hook — all game events
-├── lib/
-│   ├── api/client.ts           # Centralized fetch wrapper
-│   ├── auth/                   # JWT, password, middleware
-│   ├── chess/engine.ts         # Server-side move validation (Chess.js)
-│   ├── errors/                 # Typed error classes
-│   ├── logger.ts               # Pino logger
-│   └── validation.ts           # Zod schemas
+├── context/                    # auth, matchmaking
+├── db/                         # schema, migrations, client (Postgres-js + PGlite)
+├── hooks/                      # useGameSocket
+├── lib/                        # api, auth, chess, errors, logger, validation
 ├── server/
-│   ├── index.ts                # Custom server (Next.js + Socket.io on same port)
+│   ├── index.ts                # Custom HTTP server: Next + Socket.io
+│   ├── load-env.ts
+│   ├── matchmaking/            # In-memory queue (dev)
 │   ├── services/
-│   │   ├── auth.service.ts     # Register, login, refresh, logout
-│   │   ├── game.service.ts     # Create game, process moves, forfeit
-│   │   └── wallet.service.ts   # Ledger, escrow, payout, balance
-│   └── socket/
-│       └── game.handler.ts     # Socket.io event handlers
-├── scripts/
-│   ├── migrate.ts              # Run Drizzle migrations
-│   └── seed.ts                 # Create test users
-├── middleware.ts               # Next.js route protection
-├── .env.example                # Environment variable template
+│   └── socket/game.handler.ts
+├── scripts/                    # migrate, seed, launch, wait-for-pg, ensure-database, load-env
+├── middleware.ts
+├── docker-compose.yml          # Postgres on host port 5433
+├── .env.example
 └── drizzle.config.ts
 ```
 
@@ -209,26 +168,22 @@ chesspay/
 
 ### Why a custom server?
 
-Next.js App Router doesn't support WebSocket upgrades natively. `server/index.ts` creates an HTTP server that mounts both Next.js (for all page/API routes) and Socket.io on the same port. No separate backend process needed.
+Next.js App Router does not handle WebSocket upgrades by itself. `server/index.ts` serves Next.js and Socket.io on the **same port**.
+
+### Database modes
+
+- **`USE_PGLITE=true`:** Embedded Postgres via `@electric-sql/pglite` for local dev without installing Postgres.
+- **`USE_PGLITE=false`:** Use **`DATABASE_URL`** with Docker or a managed/local Postgres server.
+
+The Drizzle instance is stored on **`globalThis`** so the custom server and Next’s API route bundles share one connection.
 
 ### The Ledger Model
 
-The `ledger_transactions` table is **INSERT-ONLY**. No balance column is ever mutated directly. Every wallet balance is computed as:
-
-```sql
-SELECT SUM(amount) FROM ledger_transactions
-WHERE user_id = $1 AND status = 'SETTLED'
-```
-
-This makes the system crash-safe, auditable, and immune to double-spend bugs.
+`ledger_transactions` is **insert-only**. Balance = `SUM(amount) WHERE status = 'SETTLED'`.
 
 ### Move Validation
 
-**The client is never trusted for move legality.** All moves go through `lib/chess/engine.ts` (Chess.js) on the server inside the Socket.io handler. Illegal moves are rejected and the attempt is logged.
-
-### Crash Recovery
-
-Every valid move updates `games.fen_snapshot` in a DB transaction alongside the `game_moves` insert. If the server restarts mid-game, the exact board position is recoverable from the database.
+Move legality is enforced on the server (`lib/chess/engine.ts`), not the client.
 
 ---
 
@@ -236,15 +191,22 @@ Every valid move updates `games.fen_snapshot` in a DB transaction alongside the 
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Start dev server with hot reload |
-| `npm run build` | Production build |
-| `npm run start` | Start production server |
-| `npm run type-check` | TypeScript type check |
+| `npm run dev` | Dev server (tsx + hot reload) |
+| `npm run launch` | PGlite: migrate + seed. Else: Docker up, wait, migrate, seed |
+| `npm run build` | Production Next.js build |
+| `npm run start` | Production server (`NODE_ENV=production`) |
+| `npm run type-check` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
 | `npm run db:generate` | Generate Drizzle migrations from schema |
-| `npm run db:migrate` | Apply migrations to database |
+| `npm run db:migrate` | Apply migrations |
 | `npm run db:seed` | Seed test users |
-| `npm run db:studio` | Open Drizzle Studio (DB browser) |
+| `npm run db:seed:loadtest` | Seed 100 load-test accounts (dev only) |
+| `npm run db:up` | `docker compose up -d` |
+| `npm run db:wait` | Wait for Postgres (`DATABASE_URL`) |
+| `npm run db:ensure` | Create database from `DATABASE_URL` if missing |
+| `npm run db:setup` | Docker up + wait + migrate + seed |
+| `npm run db:setup:native` | ensure + migrate + seed |
+| `npm run db:studio` | Drizzle Studio |
 
 ---
 
@@ -252,11 +214,11 @@ Every valid move updates `games.fen_snapshot` in a DB transaction alongside the 
 
 | Phase | Status | Description |
 |---|---|---|
-| Phase 1 | ✅ Complete | Foundation, auth, real-time chess, ledger, wallet UI |
-| Phase 2 | 🔜 Next | Real matchmaking queue, ELO updates, Stripe deposits |
-| Phase 3 | 🔜 | Anti-cheat MVP (Stockfish analysis), KYC via Stripe Identity |
-| Phase 4 | 🔜 | Load testing, Redis adapter, PgBouncer, horizontal scaling |
-| Phase 5 | 🔜 | Render deployment, production hardening |
+| Phase 1 | ✅ In progress | Foundation, auth, real-time chess, ledger, wallet, lobby queue + matchmaking API, PGlite dev path |
+| Phase 2 | 🔜 | Stripe deposits, ELO updates from rated games |
+| Phase 3 | 🔜 | Anti-cheat MVP, KYC via Stripe Identity |
+| Phase 4 | 🔜 | Redis adapter, PgBouncer, horizontal scaling |
+| Phase 5 | 🔜 | Production deploy, hardening |
 
 ---
 
@@ -264,17 +226,18 @@ Every valid move updates `games.fen_snapshot` in a DB transaction alongside the 
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | ✅ | PostgreSQL connection string |
-| `JWT_ACCESS_SECRET` | ✅ | Min 32 chars — sign access tokens |
-| `JWT_REFRESH_SECRET` | ✅ | Min 32 chars — sign refresh tokens |
+| `USE_PGLITE` | No | `true` / `1` = embedded PGlite (no `DATABASE_URL` needed for connection) |
+| `PGLITE_DATA_PATH` | No | PGlite data dir; default OS temp, or `memory://`, or e.g. `.pglite/data` |
+| `DATABASE_URL` | If `USE_PGLITE` off | PostgreSQL URL (e.g. Docker: port **5433**) |
+| `JWT_ACCESS_SECRET` | ✅ | Min 32 chars |
+| `JWT_REFRESH_SECRET` | ✅ | Min 32 chars |
 | `JWT_ACCESS_EXPIRES_IN` | ✅ | e.g. `15m` |
 | `JWT_REFRESH_EXPIRES_IN` | ✅ | e.g. `7d` |
-| `NEXT_PUBLIC_APP_URL` | ✅ | Full app URL (`http://localhost:3000`) |
-| `NEXT_PUBLIC_SOCKET_URL` | ✅ | Socket.io URL (same as app URL) |
-| `PLATFORM_ACCOUNT_ID` | ✅ | UUID for rake collection account |
-| `RAKE_PERCENT` | ✅ | Platform fee percentage (e.g. `7.50`) |
-| `RECONNECT_WINDOW_SECONDS` | ✅ | Seconds before disconnect forfeits (e.g. `60`) |
-| `STRIPE_SECRET_KEY` | Phase 2 | Stripe secret key |
-| `STRIPE_WEBHOOK_SECRET` | Phase 2 | Stripe webhook signing secret |
-| `PORT` | Optional | Server port (default `3000`) |
-| `LOG_LEVEL` | Optional | `debug` \| `info` \| `warn` \| `error` |
+| `NEXT_PUBLIC_APP_URL` | ✅ | Must match server origin (default dev: `http://localhost:3002`) |
+| `NEXT_PUBLIC_SOCKET_URL` | ✅ | Same host/port as app for Socket.io |
+| `PORT` | No | HTTP port (default **3002** in `.env.example`) |
+| `PLATFORM_ACCOUNT_ID` | ✅ | UUID for rake account |
+| `RAKE_PERCENT` / `NEXT_PUBLIC_RAKE_PERCENT` | ✅ | Keep in sync for UI |
+| `RECONNECT_WINDOW_SECONDS` | ✅ | Disconnect forfeit window |
+| `STRIPE_*` | Phase 2 | Stripe keys |
+| `LOG_LEVEL` | No | `debug` \| `info` \| `warn` \| `error` |

@@ -178,6 +178,8 @@ export default function GamePage() {
       })
     }, 100)
     return () => clearInterval(iv)
+    // lastTickAt changes every tick; including it would tear down/recreate the interval each time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-arm when side (re)starts
   }, [clock.activeSide])
 
   const onPieceDrop = useCallback(
