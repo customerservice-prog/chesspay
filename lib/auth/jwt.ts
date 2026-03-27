@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken'
+import jwt, { type SignOptions } from 'jsonwebtoken'
 import { AuthError } from '../errors'
 
 export interface AccessTokenPayload {
@@ -29,16 +29,16 @@ function getSecret(key: 'access' | 'refresh'): string {
 
 export function signAccessToken(payload: Omit<AccessTokenPayload, 'iat' | 'exp'>): string {
   return jwt.sign(payload, getSecret('access'), {
-    expiresIn: (process.env.JWT_ACCESS_EXPIRES_IN ?? '15m') as string,
+    expiresIn: process.env.JWT_ACCESS_EXPIRES_IN ?? '15m',
     algorithm: 'HS256',
-  })
+  } as SignOptions)
 }
 
 export function signRefreshToken(payload: Omit<RefreshTokenPayload, 'iat' | 'exp'>): string {
   return jwt.sign(payload, getSecret('refresh'), {
-    expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN ?? '7d') as string,
+    expiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '7d',
     algorithm: 'HS256',
-  })
+  } as SignOptions)
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload {

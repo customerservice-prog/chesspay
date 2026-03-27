@@ -103,3 +103,32 @@ export const gamesApi = {
   createGame: (body: unknown) =>
     apiClient.post<{ data: { game: unknown } }>('/api/games', body),
 }
+
+export type MatchmakingJoinResult =
+  | { status: 'matched'; gameId: string }
+  | { status: 'queued' }
+
+export type MatchmakingPollResult =
+  | { status: 'matched'; gameId: string }
+  | { status: 'queued' }
+  | { status: 'idle' }
+
+export const matchmakingApi = {
+  join: (body: { wagerAmount: number; timeControl: { baseSecs: number; incrementSecs: number } }) =>
+    apiClient.post<{ data: MatchmakingJoinResult }>('/api/matchmaking/join', body),
+  poll: () => apiClient.get<{ data: MatchmakingPollResult }>('/api/matchmaking/poll'),
+  cancel: () => apiClient.post<{ data: { cancelled: boolean } }>('/api/matchmaking/cancel', {}),
+}
+
+export const platformApi = {
+  activity: () =>
+    apiClient.get<{
+      data: {
+        liveMatches: number
+        registeredPlayers: number
+        gamesCompleted24h: number
+        matchmakingSearching: number
+        recentWins: { username: string; wagerAmount: string; completedAt: string | null }[]
+      }
+    }>('/api/platform/activity'),
+}

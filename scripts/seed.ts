@@ -1,3 +1,5 @@
+import './load-env'
+
 /**
  * Seed script — creates test accounts for local development.
  * Run: npm run db:seed
@@ -10,7 +12,7 @@
  * NEVER run this against production.
  */
 
-import { db } from '../db/client'
+import { db, initDatabase } from '../db/client'
 import { users } from '../db/schema'
 import { hashPassword } from '../lib/auth/password'
 import { logger } from '../lib/logger'
@@ -55,6 +57,8 @@ async function seed() {
     logger.error('Seed script must NOT be run in production')
     process.exit(1)
   }
+
+  await initDatabase()
 
   logger.info('Seeding database...')
 

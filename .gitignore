@@ -17,6 +17,7 @@ out/
 # Build
 dist/
 build/
+*.tsbuildinfo
 
 # Drizzle generated migrations (keep meta, gitignore generated SQL if preferred)
 # drizzle/
@@ -39,3 +40,6 @@ coverage/
 
 # Misc
 *.tgz
+
+# PGlite embedded DB (local dev)
+.pglite/

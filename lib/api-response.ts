@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { AppError, toAppError } from '../errors'
-import { logger } from '../logger'
+import { AppError, toAppError } from './errors'
+import { logger } from './logger'
 
 export function ok<T>(data: T, status = 200): NextResponse {
   return NextResponse.json({ data }, { status })

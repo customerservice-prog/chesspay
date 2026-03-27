@@ -7,6 +7,8 @@ import { clsx } from 'clsx'
 interface Balance { available: number; locked: number; total: number }
 interface Txn { id:string; txnType:string; amount:string; status:string; createdAt:string; metadata:Record<string,unknown> }
 
+const RAKE_PERCENT = parseFloat(process.env.NEXT_PUBLIC_RAKE_PERCENT ?? '7.5')
+
 const TXN_LABELS: Record<string,{ label:string; icon:string }> = {
   DEPOSIT:        { label:'Deposit',          icon:'↓' },
   WITHDRAWAL:     { label:'Withdrawal',       icon:'↑' },
@@ -95,6 +97,27 @@ export default function WalletPage() {
         </div>
       </div>
 
+      <div className="card p-6 border border-border">
+        <p className="section-header mb-3">Before you stake</p>
+        <p className="text-xs text-secondary mb-4">
+          Every paid match mirrors the lobby breakdown: two equal stakes, one pot, platform fee, net to the winner. Funds
+          move only through ledger rows you can audit below.
+        </p>
+        <div className="grid sm:grid-cols-2 gap-3 text-xs">
+          {[
+            { label: 'Example stake (each player)', value: '$10.00' },
+            { label: 'Pot', value: '$20.00' },
+            { label: `Platform fee (${RAKE_PERCENT}%)`, value: `$${(20 * (RAKE_PERCENT / 100)).toFixed(2)}` },
+            { label: 'Winner receives (net)', value: `$${(20 * (1 - RAKE_PERCENT / 100)).toFixed(2)}` },
+          ].map((row) => (
+            <div key={row.label} className="flex justify-between gap-4 py-2 border-b border-border/60">
+              <span className="text-secondary">{row.label}</span>
+              <span className="font-mono text-primary font-semibold">{row.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Ledger notice */}
       <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-elevated border border-border">
         <span className="text-gold text-sm">◈</span>
@@ -116,7 +139,9 @@ export default function WalletPage() {
             <div className="text-4xl mb-3 opacity-20">◈</div>
             <p className="text-secondary text-sm">No transactions yet</p>
             {process.env.NODE_ENV !== 'production' && (
-              <p className="text-xs text-tertiary mt-1">Click "+ $100 Test" to add dev funds</p>
+              <p className="text-xs text-tertiary mt-1">
+                Click <span className="font-mono">+ $100 Test</span> to add dev funds
+              </p>
             )}
           </div>
         ) : (

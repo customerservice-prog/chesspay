@@ -6,23 +6,26 @@
  * Run: npm run dev  (uses tsx for hot-reload in development)
  */
 
+import './load-env'
+
 import { createServer } from 'http'
 import { parse } from 'url'
 import next from 'next'
-import { config } from 'dotenv'
-import { initSocketServer } from './socket/game.handler'
+import { initDatabase } from '../db/client'
 import { logger } from '../lib/logger'
 
-// Load env before anything else
-config({ path: '.env.local' })
-
 const dev = process.env.NODE_ENV !== 'production'
-const port = parseInt(process.env.PORT ?? '3000', 10)
+/** Default 3002 so 3000/3001 can stay free for other apps; override with PORT in .env.local */
+const port = parseInt(process.env.PORT ?? '3002', 10)
 
 const app = next({ dev })
 const handle = app.getRequestHandler()
 
 async function main() {
+  await initDatabase()
+
+  const { initSocketServer } = await import('./socket/game.handler')
+
   await app.prepare()
 
   const httpServer = createServer((req, res) => {
@@ -30,14 +33,16 @@ async function main() {
     handle(req, res, parsedUrl)
   })
 
-  // Attach Socket.io to the same HTTP server
   const io = initSocketServer(httpServer)
   logger.info('Socket.io initialized')
 
   httpServer.listen(port, () => {
+    const localUrl = `http://localhost:${port}`
     logger.info({ port, env: process.env.NODE_ENV }, `Checkmate.GG server running`)
-    logger.info(`  → App:    http://localhost:${port}`)
+    logger.info(`  → App:    ${localUrl}`)
     logger.info(`  → Socket: ws://localhost:${port}`)
+    // Plain line so it’s easy to spot in the terminal (JSON logs can bury the URL).
+    console.log(`\n  Local app: ${localUrl}\n`)
   })
 }
 

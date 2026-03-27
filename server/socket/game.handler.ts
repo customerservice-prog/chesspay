@@ -15,7 +15,7 @@ const userGameMap = new Map<string, string>() // userId -> gameId
 export function initSocketServer(httpServer: HttpServer): Server {
   const io = new Server(httpServer, {
     cors: {
-      origin: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+      origin: process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3002',
       credentials: true,
     },
     pingTimeout: 20000,

@@ -52,14 +52,23 @@ export function useGameSocket(token: string | null, events: GameSocketEvents = {
       auth: { token },
       transports: ['websocket'],
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 15000,
+      randomizationFactor: 0.5,
+      timeout: 25000,
     })
 
     socketRef.current = socket
 
     socket.on('connect', () => setConnected(true))
-    socket.on('disconnect', () => setConnected(false))
+    socket.on('disconnect', (reason) => {
+      setConnected(false)
+      if (reason === 'io server disconnect') {
+        socket.connect()
+      }
+    })
+    socket.on('connect_error', () => setConnected(false))
 
     socket.on('game:move_applied', (p) => eventsRef.current.onMoveApplied?.(p))
     socket.on('game:move_rejected', (p) => eventsRef.current.onMoveRejected?.(p))
